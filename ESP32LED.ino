@@ -1,20 +1,29 @@
-#define RXD2 33
-#define TXD2 4
+/*This code is an example that creates a web server, using an ESP32, that allows you to wirelessly operate an LED connected to an Arduino. The ESP32 features three serial connections and WiFi module. The WiFi module can rely on existing network credentials to generate a web server. Alternatively, one may create a unique access point and turn the ESP32 into a network host and a server. When using the ESP32 on the Arduino IDE, ensure that the ESP32 board package is included. This can be done by navigating to preferences and pasting the following URL:
+
+https://dl.espressif.com/dl/package_esp32_index.json,http://arduino.esp8266.com/stable/package_esp8266com_index.json
+*/
+
+
+/*Define the serial pins that you will use to communicate with an Arduino. For an ESP32, generally pins 16 (RX) and 17 (TX) are used for serial communication with other devices. If you are using a non-standard ESP32, then the serial pins would need to be changed as needed.
+*/
+
+#define RX2 16
+#define TX2 17
 
 // Load Wi-Fi library
 #include <WiFi.h>
 
-// Replace with your network credentials
-const char* ssid = "Primus-55a0";
-const char* password = "3c90666f55a0";
+// Include network credentials
+const char* ssid = "*****";
+const char* password = "*****";
 
-// Set web server port number to 80
+// Set web server port number to 80 (HTTP)
 WiFiServer server(80);
 
 // Variable to store the HTTP request
 String header;
 
-// Auxiliar variables to store the current output state
+// Auxiliary variables to store the LED state
 String LEDState = "off";
 char c;
 
@@ -23,11 +32,15 @@ unsigned long currentTime = millis();
 unsigned long previousTime = 0; 
 const long timeoutTime = 2000;
 
-//Uncomment this section of code if you want to set a fixed IP Address
+/*Uncomment this section of code if you want to set a fixed IP Address. By default, the WiFi library will assign an arbitrary vacant IP Address for clients to connect to.
 IPAddress local_IP(192, 168, 1, 18);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 0, 0);
+*/
 
+/* Uncomment this section, if you would like to create a unique access point for the ESP32 using your own desired network ID and password.
+WiFi.softAP(ssid, password);
+*/
 
 
 void setup() {
@@ -35,13 +48,14 @@ void setup() {
   Serial.begin(115200);
   Serial2.begin(9600,SERIAL_8N1, RXD2, TXD2); 
   
-  // Connect to Wi-Fi network with SSID and password
+  // Display a message indicating an imminent connection to the network
   Serial.print("Connecting to ");
   Serial.println(ssid);
 
-  //If you have a fixed IP Address, then you must include this line
+  /*If you have a fixed IP Address, then you must include this line
   WiFi.config(local_IP, gateway, subnet); 
-
+  */
+  
   //Attempt to connect to the WiFi Network
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -49,7 +63,7 @@ void setup() {
     Serial.print(".");
   }
   
-  // Print local IP address and start web server
+  // Print local IP address of Server
   Serial.println("");
   Serial.println("WiFi connected.");
   Serial.println("IP address: ");
@@ -61,35 +75,38 @@ void setup() {
 
 void loop(){
 
-  //Make the Server listen for Clients.
+  //Make the server listen for clients.
   WiFiClient client = server.available();
 
-  //Indicate if a client was connected.
-  if (client) {                             
+  
+  if (client) {
+    //Indicate if a client was connected.
     currentTime = millis();
     previousTime = currentTime;
     Serial.println("New Client.");          
-
     
-    String currentLine = "";                // make a String to hold incoming data from the client
-    while (client.connected() && currentTime - previousTime <= timeoutTime) {  // loop while the client's connected
+    //Make a String to hold information from the Client
+    String currentLine = "";                
+    
+    //Run this loop while a client is connected
+    while (client.connected() && currentTime - previousTime <= timeoutTime) {
       currentTime = millis();
-      if (client.available()) {             // if there's bytes to read from the client,
-        char c = client.read();             // read a byte, then
-        Serial.write(c);                    // print it out the serial monitor
+      
+      //If the client is connected, then read the URL from the client and store it into the header string.
+      if (client.available()) {             
+        char c = client.read();             
+        Serial.write(c);                    
         header += c;
-        if (c == '\n') {                    // if the byte is a newline character
-          // if the current line is blank, you got two newline characters in a row.
-          // that's the end of the client HTTP request, so send a response:
+       
+        //Once the end of the URL is read (A new-line character appears), display a standard HTTP success report 
+        if (c == '\n') {                    
           if (currentLine.length() == 0) {
-            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
-            // and a content-type so the client knows what's coming, then a blank line:
             client.println("HTTP/1.1 200 OK");
             client.println("Content-type:text/html");
             client.println("Connection: close");
             client.println();
             
-            // turns the GPIOs on and off
+            // Check the header and identify whether the LED is on or off
             if (header.indexOf("GET /led/on") >= 0) {
               Serial.println("LED Is on");
               LEDState = "on";
@@ -98,12 +115,10 @@ void loop(){
               LEDState = "off";
             }
             
-            // Display the HTML web page
+            // Map the foundations of the HTML Webpage for display
             client.println("<!DOCTYPE html><html>");
             client.println("<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
             client.println("<link rel=\"icon\" href=\"data:,\">");
-            // CSS to style the on/off buttons 
-            // Feel free to change the background-color and font-size attributes to fit your preferences
             client.println("<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}");
             client.println(".button { background-color: #4CAF50; border: none; color: white; padding: 16px 40px;");
             client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}");
@@ -112,15 +127,27 @@ void loop(){
             // Web Page Heading
             client.println("<body><h1>ESP32 Web Server</h1>");
             
-            // Display current state, and ON/OFF buttons for GPIO 26  
+            // Display current state of the LED  
             client.println("<p>LED State " + LEDState + "</p>");
-            // If the output26State is off, it displays the ON button       
+            
+            // If the LED is off, the webpage displays the ON button       
             if (LEDState=="off") {
+              
+              //Show the "ON" button if the LED is off
               client.println("<p><a href=\"/led/on\"><button class=\"button\">ON</button></a></p>");
+              
+              //Send a character to the serial port for the Arduino to notify the Arduino that the LED should be off
               c = 'l';
               Serial2.write(c);
-            } else {
+            } 
+            
+            //When the LED is on, the webpage displays the OFF button
+            else {
+              
+              //Show the "OFF" button when the LED is on
               client.println("<p><a href=\"/led/off\"><button class=\"button button2\">OFF</button></a></p>");
+              
+              //Send a character to the serial port for the Arduino to notify the Arduino that the LED should be on
               c = 'h';
               Serial2.write(c);
             } 
@@ -137,9 +164,9 @@ void loop(){
         }
       }
     }
-    // Clear the header variable
+    
+    // Clear all variables and close the connection if the client disconnects
     header = "";
-    // Close the connection
     client.stop();
     Serial.println("Client disconnected.");
     Serial.println("");
